@@ -30,6 +30,16 @@ SOURCES = [
         "queries": ["global economy markets", "Fed interest rate inflation"],
         "max": 5,
     },
+    {
+        "section": "국내 정치 & 외교",
+        "queries": ["한국 외교 정치", "한미관계 한일관계 외교"],
+        "max": 3,
+    },
+    {
+        "section": "국제 지정학 & 외교",
+        "queries": ["미중 갈등 지정학", "러시아 우크라이나 전쟁", "중동 전쟁 외교", "NATO 트럼프 외교"],
+        "max": 7,
+    },
 ]
 
 # 목요일 전용 부동산 지표 섹션
@@ -198,6 +208,8 @@ def build_html(sections_data: list, keywords: str) -> str:
             "부동산 & 금융": "🏦",
             "국내 경제": "🇰🇷",
             "국제 경제": "🌐",
+            "국내 정치 & 외교": "🏛️",
+            "국제 지정학 & 외교": "🌍",
             "🏘️ 이번 주 부동산 지표": "🏘️",
         }
         icon = icon_map.get(sec["section"], "📰")
