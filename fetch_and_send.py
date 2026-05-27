@@ -88,6 +88,24 @@ def fetch_section(queries: list, max_articles: int) -> list:
     return articles[:max_articles]
 
 
+def deduplicate(articles: list, seen_titles: set) -> list:
+    result = []
+    for a in articles:
+        title = a["title"]
+        words = set(title.replace(" ", "")[:20])
+        is_dup = False
+        for seen in seen_titles:
+            seen_words = set(seen.replace(" ", "")[:20])
+            overlap = len(words & seen_words) / max(len(words), 1)
+            if overlap > 0.6:
+                is_dup = True
+                break
+        if not is_dup:
+            seen_titles.add(title)
+            result.append(a)
+    return result
+
+
 def summarize_batch(articles: list, is_indicator: bool = False) -> list:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     items_text = "\n".join(f"{i+1}. {a['title']}" for i, a in enumerate(articles))
@@ -97,15 +115,16 @@ def summarize_batch(articles: list, is_indicator: bool = False) -> list:
     else:
         extra = ""
 
-    prompt = f"""다음 경제 뉴스 제목들을 각각 3줄로 요약해줘. {extra}
+    prompt = f"""다음 뉴스 제목들을 각각 요약해줘. {extra}
 반드시 아래 형식을 정확히 지켜. 번호 순서대로, 다른 말 없이 JSON 배열만 출력해.
 
 형식:
 [
   {{
     "what": "무슨 일이 일어났는지 (1줄, 핵심 사실만)",
-    "why": "왜 중요한지 (1줄, 시장/경제 영향)",
-    "num": "핵심 수치 또는 방향성 (없으면 '-')"
+    "why": "왜 중요한지 (1줄, 시장/경제/외교 영향)",
+    "num": "핵심 수치 또는 방향성 (없으면 '-')",
+    "score": 중요도 1-5 정수 (5=매우 중요. 기준: 정책발표/수치발표/정상회담=5, 분석칼럼/전망=2)
   }}
 ]
 
@@ -115,18 +134,19 @@ def summarize_batch(articles: list, is_indicator: bool = False) -> list:
     try:
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=1500,
+            max_tokens=1800,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = msg.content[0].text.strip()
         start, end = raw.find("["), raw.rfind("]") + 1
         summaries = json.loads(raw[start:end])
         for i, a in enumerate(articles):
-            a["summary"] = summaries[i] if i < len(summaries) else {"what": a["title"][:40], "why": "-", "num": "-"}
+            a["summary"] = summaries[i] if i < len(summaries) else {"what": a["title"][:40], "why": "-", "num": "-", "score": 3}
+        articles.sort(key=lambda x: x.get("summary", {}).get("score", 3), reverse=True)
     except Exception as e:
         print(f"  요약 오류: {e}")
         for a in articles:
-            a["summary"] = {"what": a["title"][:40], "why": "-", "num": "-"}
+            a["summary"] = {"what": a["title"][:40], "why": "-", "num": "-", "score": 3}
     return articles
 
 
@@ -144,6 +164,22 @@ def extract_keywords(all_articles: list) -> str:
         return msg.content[0].text.strip()
     except Exception:
         return "경제 · 금융 · 시장"
+
+
+def generate_briefing(all_articles: list) -> str:
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    titles = " / ".join(a["title"] for a in all_articles[:20])
+    try:
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=120,
+            messages=[{"role": "user", "content":
+                f"다음 뉴스들을 보고 오늘의 핵심 흐름을 한 문장으로 요약해줘. "
+                f"경제·외교·지정학 흐름을 연결해서, 30자 이내로. 다른 말 없이 문장만.\n{titles}"}],
+        )
+        return msg.content[0].text.strip()
+    except Exception:
+        return "오늘의 주요 경제·외교 동향을 확인하세요."
 
 
 # ── HTML 생성 ─────────────────────────────────────────
@@ -200,7 +236,7 @@ def build_thursday_banner() -> str:
     </div>"""
 
 
-def build_html(sections_data: list, keywords: str) -> str:
+def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
     sections_html = ""
     for sec in sections_data:
         is_indicator = "지표" in sec["section"]
@@ -257,6 +293,15 @@ def build_html(sections_data: list, keywords: str) -> str:
 
     {thursday_banner}
 
+    <!-- 한줄 브리핑 -->
+    <div style="background:#141414;border:1px solid #2a2a2a;border-radius:8px;
+                padding:14px 18px;margin-bottom:12px;text-align:center;">
+      <div style="font-size:10px;color:#888;font-weight:700;letter-spacing:2px;margin-bottom:6px;">
+        TODAY'S BRIEFING
+      </div>
+      <div style="font-size:14px;color:#e0e0e0;line-height:1.6;">{briefing}</div>
+    </div>
+
     <!-- 키워드 -->
     <div style="background:#1a1500;border:1px solid #3a2e00;border-radius:8px;
                 padding:14px 18px;margin-bottom:24px;text-align:center;">
@@ -305,11 +350,13 @@ if __name__ == "__main__":
     active_sources = SOURCES + (THURSDAY_SOURCES if IS_THURSDAY else [])
     sections_data = []
     all_articles = []
+    seen_titles = set()  # 전체 중복 제거용
 
     for src in active_sources:
         print(f"\n[{src['section']}] 수집 중...")
         articles = fetch_section(src["queries"], src["max"])
-        print(f"  {len(articles)}건 수집")
+        articles = deduplicate(articles, seen_titles)  # 중복 제거
+        print(f"  {len(articles)}건 수집 (중복 제거 후)")
         if articles:
             is_ind = "지표" in src["section"]
             articles = summarize_batch(articles, is_indicator=is_ind)
@@ -321,7 +368,11 @@ if __name__ == "__main__":
     keywords = extract_keywords(all_articles)
     print(f"키워드: {keywords}")
 
-    html = build_html(sections_data, keywords)
+    print("\n한줄 브리핑 생성 중...")
+    briefing = generate_briefing(all_articles)
+    print(f"브리핑: {briefing}")
+
+    html = build_html(sections_data, keywords, briefing)
     print("\n이메일 발송 중...")
     send_email(html, keywords)
     print("\n✅ 완료")
