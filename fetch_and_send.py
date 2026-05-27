@@ -27,7 +27,7 @@ SOURCES = [
     },
     {
         "section": "국제 경제",
-        "queries": ["global economy markets", "Fed interest rate inflation"],
+        "queries": ["Fed interest rate global economy 2026", "oil price trade war inflation 2026"],
         "max": 5,
     },
     {
@@ -155,34 +155,34 @@ def card(article: dict, is_indicator: bool = False) -> str:
     num_bg = "#D4EDDA" if not is_indicator else "#cce8f4"
 
     return f"""
-    <div style="background:#fff;border:1px solid #eee;border-radius:8px;
+    <div style="background:#1e1e1e;border:1px solid #2e2e2e;border-radius:8px;
                 padding:16px 18px;margin-bottom:10px;">
       <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-        <a href="{article['link']}" style="color:#1a1a1a;font-size:14px;font-weight:600;
+        <a href="{article['link']}" style="color:#e8e8e8;font-size:14px;font-weight:600;
            text-decoration:none;line-height:1.4;flex:1;">{article['title']}</a>
         {source}
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;">
         <tr>
           <td style="padding:3px 0;width:60px;vertical-align:top;">
-            <span style="background:#FFF3CD;color:#856404;padding:2px 6px;
+            <span style="background:#3a3000;color:#f0b429;padding:2px 6px;
                   border-radius:3px;font-size:11px;font-weight:600;">무슨 일</span>
           </td>
-          <td style="color:#333;padding:3px 0 3px 8px;line-height:1.5;">{what}</td>
+          <td style="color:#c8c8c8;padding:3px 0 3px 8px;line-height:1.5;">{what}</td>
         </tr>
         <tr>
           <td style="padding:3px 0;vertical-align:top;">
-            <span style="background:#D1ECF1;color:#0c5460;padding:2px 6px;
+            <span style="background:#002a33;color:#5bc8d8;padding:2px 6px;
                   border-radius:3px;font-size:11px;font-weight:600;">왜 중요</span>
           </td>
-          <td style="color:#333;padding:3px 0 3px 8px;line-height:1.5;">{why}</td>
+          <td style="color:#c8c8c8;padding:3px 0 3px 8px;line-height:1.5;">{why}</td>
         </tr>
         <tr>
           <td style="padding:3px 0;vertical-align:top;">
-            <span style="background:{num_bg};color:{num_color};padding:2px 6px;
+            <span style="background:#002200;color:#4ade80;padding:2px 6px;
                   border-radius:3px;font-size:11px;font-weight:600;">수치</span>
           </td>
-          <td style="color:#333;padding:3px 0 3px 8px;font-weight:600;">{num}</td>
+          <td style="color:#e8e8e8;padding:3px 0 3px 8px;font-weight:600;">{num}</td>
         </tr>
       </table>
     </div>"""
@@ -204,6 +204,7 @@ def build_html(sections_data: list, keywords: str) -> str:
     sections_html = ""
     for sec in sections_data:
         is_indicator = "지표" in sec["section"]
+        is_marketpulse = sec["section"] in ["부동산 & 금융", "국내 경제", "국제 경제", "🏘️ 이번 주 부동산 지표"]
         icon_map = {
             "부동산 & 금융": "🏦",
             "국내 경제": "🇰🇷",
@@ -214,12 +215,18 @@ def build_html(sections_data: list, keywords: str) -> str:
         }
         icon = icon_map.get(sec["section"], "📰")
         label = sec["section"].replace("🏘️ ", "")
-        border_color = "#4ade80" if is_indicator else "#f0b429"
+        border_color = "#4ade80" if is_indicator else ("#f0b429" if is_marketpulse else "#7c6fe0")
         cards_html = "".join(card(a, is_indicator) for a in sec["articles"])
 
+        # 지정학 섹션 앞에 구분선 추가
+        divider = ""
+        if sec["section"] == "국내 정치 & 외교":
+            divider = '<div style="border-top:1px solid #2e2e2e;margin:24px 0 28px;"></div>'
+
         sections_html += f"""
+        {divider}
         <div style="margin-bottom:28px;">
-          <h2 style="font-size:15px;font-weight:700;color:#1a1a1a;
+          <h2 style="font-size:15px;font-weight:700;color:#e8e8e8;
                      border-bottom:2px solid {border_color};padding-bottom:6px;margin-bottom:14px;">
             {icon} {label}
           </h2>
@@ -227,36 +234,42 @@ def build_html(sections_data: list, keywords: str) -> str:
         </div>"""
 
     thursday_banner = build_thursday_banner() if IS_THURSDAY else ""
-    weekday_badge = f'<span style="background:#f0b429;color:#1a1a1a;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;">{WEEKDAY}요일</span>'
+    weekday_badge = f'<span style="background:#f0b429;color:#0d0d0d;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;">{WEEKDAY}요일</span>'
 
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;">
+<body style="margin:0;padding:0;background:#0d0d0d;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;">
   <div style="max-width:600px;margin:0 auto;padding:20px 16px;">
 
-    <div style="background:#1a1a1a;border-radius:10px;padding:24px;margin-bottom:20px;text-align:center;">
-      <div style="font-size:22px;font-weight:900;color:#f0b429;letter-spacing:-0.5px;">MarketPulse</div>
-      <div style="color:#888;font-size:11px;margin-top:4px;letter-spacing:1px;">DAILY ECONOMIC INTELLIGENCE</div>
-      <div style="color:#ccc;font-size:13px;margin-top:12px;">
+    <!-- 메인 헤더 -->
+    <div style="background:#141414;border:1px solid #2a2a2a;border-radius:12px;padding:28px 24px;margin-bottom:16px;text-align:center;">
+      <div style="font-size:30px;font-weight:900;color:#f0b429;letter-spacing:-1px;">잡학다식</div>
+      <div style="color:#555;font-size:11px;margin-top:4px;letter-spacing:2px;">DAILY INTELLIGENCE BRIEFING</div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a2a;">
+        <div style="color:#888;font-size:11px;letter-spacing:1px;margin-bottom:4px;">📈 MarketPulse</div>
+        <div style="color:#555;font-size:10px;letter-spacing:1px;">ECONOMIC & GEOPOLITICAL BRIEFING</div>
+      </div>
+      <div style="color:#999;font-size:13px;margin-top:12px;">
         {TODAY} &nbsp;{weekday_badge}
       </div>
     </div>
 
     {thursday_banner}
 
-    <div style="background:#fff8e1;border:1px solid #f0b429;border-radius:8px;
-                padding:14px 18px;margin-bottom:20px;text-align:center;">
-      <div style="font-size:11px;color:#856404;font-weight:600;letter-spacing:1px;margin-bottom:6px;">
+    <!-- 키워드 -->
+    <div style="background:#1a1500;border:1px solid #3a2e00;border-radius:8px;
+                padding:14px 18px;margin-bottom:24px;text-align:center;">
+      <div style="font-size:10px;color:#f0b429;font-weight:700;letter-spacing:2px;margin-bottom:6px;">
         TODAY'S KEYWORDS
       </div>
-      <div style="font-size:16px;font-weight:700;color:#1a1a1a;">{keywords}</div>
+      <div style="font-size:16px;font-weight:700;color:#f0f0f0;">{keywords}</div>
     </div>
 
     {sections_html}
 
-    <div style="text-align:center;padding:16px 0;color:#aaa;font-size:11px;">
-      Powered by Google News + Claude Haiku<br>
+    <div style="text-align:center;padding:16px 0;color:#444;font-size:11px;">
+      잡학다식 · Powered by Google News + Claude Haiku<br>
       자동 발송 · 매일 오전 6시 KST
     </div>
   </div>
@@ -271,7 +284,7 @@ def send_email(html: str, keywords: str):
 
     thursday_tag = " 🏘️" if IS_THURSDAY else ""
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"📈 MarketPulse {TODAY} ({WEEKDAY}){thursday_tag} — {keywords}"
+    msg["Subject"] = f"잡학다식 {TODAY} ({WEEKDAY}){thursday_tag} — {keywords}"
     msg["From"] = sender
     msg["To"] = receiver
     msg.attach(MIMEText(html, "html", "utf-8"))
