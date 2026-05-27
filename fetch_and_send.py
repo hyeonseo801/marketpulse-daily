@@ -274,13 +274,16 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
 
     return f"""<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#0d0d0d;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;600;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background:#0d0d0d;font-family:'IBM Plex Sans KR','Apple SD Gothic Neo',sans-serif;">
   <div style="max-width:600px;margin:0 auto;padding:20px 16px;">
 
     <!-- 메인 헤더 -->
     <div style="background:#141414;border:1px solid #2a2a2a;border-radius:12px;padding:28px 24px;margin-bottom:16px;text-align:center;">
-      <div style="font-size:30px;font-weight:900;color:#f0b429;letter-spacing:-1px;">잡학다식</div>
+      <div style="font-size:30px;font-weight:700;color:#f0b429;letter-spacing:-1px;font-family:'IBM Plex Serif',serif;">잡학다식</div>
       <div style="color:#555;font-size:11px;margin-top:4px;letter-spacing:2px;">DAILY INTELLIGENCE BRIEFING</div>
       <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a2a;">
         <div style="color:#888;font-size:11px;letter-spacing:1px;margin-bottom:4px;">📈 MarketPulse</div>
@@ -329,7 +332,7 @@ def send_email(html: str, keywords: str):
 
     thursday_tag = " 🏘️" if IS_THURSDAY else ""
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"잡학다식 {TODAY} ({WEEKDAY}){thursday_tag} — {keywords}"
+    msg["Subject"] = f"[JHDS] 📰 {TODAY} ({WEEKDAY}){thursday_tag} — {keywords}"
     msg["From"] = sender
     msg["To"] = receiver
     msg.attach(MIMEText(html, "html", "utf-8"))
