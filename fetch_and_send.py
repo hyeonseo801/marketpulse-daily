@@ -328,20 +328,21 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
 def send_email(html: str, keywords: str):
     sender = os.environ["GMAIL_ADDRESS"]
     password = os.environ["GMAIL_APP_PASSWORD"]
-    receiver = os.environ.get("RECEIVER_EMAIL", sender)
+    receiver_raw = os.environ.get("RECEIVER_EMAIL", sender)
+    receivers = [r.strip() for r in receiver_raw.split(",")]
 
     thursday_tag = " 🏘️" if IS_THURSDAY else ""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[JHDS] 📰 {TODAY} ({WEEKDAY}){thursday_tag} — {keywords}"
     msg["From"] = sender
-    msg["To"] = receiver
+    msg["To"] = ", ".join(receivers)
     msg.attach(MIMEText(html, "html", "utf-8"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(sender, password)
-        server.sendmail(sender, receiver, msg.as_string())
+        server.sendmail(sender, receivers, msg.as_string())
 
-    print(f"✅ 이메일 발송 완료 → {receiver}")
+    print(f"✅ 이메일 발송 완료 → {', '.join(receivers)}")
 
 
 # ── 메인 ─────────────────────────────────────────────
