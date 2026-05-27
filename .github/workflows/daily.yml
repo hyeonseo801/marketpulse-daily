@@ -1,1 +1,26 @@
+name: MarketPulse Daily
 
+on:
+  schedule:
+    - cron: '0 21 * * *'  # 매일 21:00 UTC = 06:00 KST
+  workflow_dispatch:       # 수동 실행 (테스트용)
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install feedparser anthropic
+
+      - name: Run MarketPulse
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+        run: python fetch_and_send.py
