@@ -14,31 +14,43 @@ WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"][NOW.weekday()]
 IS_THURSDAY = NOW.weekday() == 3
 
 # ── 소스 정의 (NewsAPI.ai 카테고리 기반) ────────────────
+# 국내 주요 언론사
+KR_SOURCES = [
+    "yna.co.kr", "chosun.com", "joongang.co.kr", "hani.co.kr",
+    "khan.co.kr", "mk.co.kr", "hankyung.com", "donga.com",
+    "hankookilbo.com", "ytn.co.kr", "kbs.co.kr", "mbc.co.kr"
+]
+
+# 국제 정치/외교 주요 언론사
+INTL_SOURCES = [
+    "reuters.com", "apnews.com", "bbc.com", "theguardian.com",
+    "ft.com", "economist.com", "foreignpolicy.com", "politico.com",
+    "aljazeera.com", "nytimes.com", "washingtonpost.com"
+]
+
 SOURCES = [
     {
         "section": "📈 국내 경제",
-        "location": "http://en.wikipedia.org/wiki/South_Korea",
+        "sources": KR_SOURCES,
         "lang": "kor",
         "max": 10,
     },
     {
         "section": "🌐 국제 경제",
-        "location": None,
+        "sources": INTL_SOURCES,
         "lang": "eng",
-        "keyword": ["economy", "finance", "market", "trade", "inflation", "GDP"],
         "max": 10,
     },
     {
         "section": "🏛️ 국내 정치 & 외교",
-        "location": "http://en.wikipedia.org/wiki/South_Korea",
+        "sources": KR_SOURCES,
         "lang": "kor",
         "max": 10,
     },
     {
         "section": "🌍 국제 지정학 & 외교",
-        "location": None,
+        "sources": INTL_SOURCES,
         "lang": "eng",
-        "keyword": ["war", "diplomacy", "conflict", "election", "sanctions", "geopolitics"],
         "max": 10,
     },
 ]
@@ -59,7 +71,7 @@ THURSDAY_SOURCES = [
 NEWSAPI_URL = "https://eventregistry.org/api/v1/article/getArticles"
 
 
-def fetch_section(location: str, lang: str, max_articles: int, keyword: list = None) -> list:
+def fetch_section(lang: str, max_articles: int, location: str = None, sources: list = None, keyword: list = None) -> list:
     api_key = os.environ["NEWSAPI_KEY"]
     articles = []
     seen = set()
@@ -77,7 +89,9 @@ def fetch_section(location: str, lang: str, max_articles: int, keyword: list = N
         "apiKey": api_key,
     }
 
-    if location:
+    if sources:
+        payload["sourceUri"] = sources
+    elif location:
         payload["sourceLocationUri"] = location
     if keyword:
         payload["keyword"] = keyword
@@ -87,7 +101,7 @@ def fetch_section(location: str, lang: str, max_articles: int, keyword: list = N
         res = requests.post(NEWSAPI_URL, json=payload, timeout=30)
         data = res.json()
         total = data.get("articles", {}).get("totalResults", 0)
-        print(f"  API 응답: 총 {total}건")
+        print(f"  API 응답: 총 {total}건 | 상태코드: {res.status_code}")
         for art in data.get("articles", {}).get("results", []):
             title = art.get("title", "").strip()
             link = art.get("url", "").strip()
@@ -107,12 +121,12 @@ def deduplicate(articles: list, seen_titles: set) -> list:
     result = []
     for a in articles:
         title = a["title"]
-        words = set(title.replace(" ", "")[:20])
+        words = set(title.replace(" ", "")[:40])
         is_dup = False
         for seen in seen_titles:
-            seen_words = set(seen.replace(" ", "")[:20])
+            seen_words = set(seen.replace(" ", "")[:40])
             overlap = len(words & seen_words) / max(len(words), 1)
-            if overlap > 0.6:
+            if overlap > 0.8:
                 is_dup = True
                 break
         if not is_dup:
@@ -368,13 +382,10 @@ if __name__ == "__main__":
     active_sources = SOURCES + (THURSDAY_SOURCES if IS_THURSDAY else [])
     sections_data = []
     all_articles = []
-    seen_titles = set()  # 전체 중복 제거용
-
     for src in active_sources:
         print(f"\n[{src['section']}] 수집 중...")
-        articles = fetch_section(src.get("location"), src.get("lang", "kor"), src["max"], src.get("keyword"))
-        articles = deduplicate(articles, seen_titles)  # 중복 제거
-        print(f"  {len(articles)}건 수집 (중복 제거 후)")
+        articles = fetch_section(src.get("lang", "kor"), src["max"], src.get("location"), src.get("sources"), src.get("keyword"))
+        print(f"  {len(articles)}건 수집")
         if articles:
             is_ind = "지표" in src["section"]
             articles = summarize_batch(articles, is_indicator=is_ind)
