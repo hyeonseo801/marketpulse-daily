@@ -377,4 +377,4 @@ if __name__ == "__main__":
     print("\n이메일 발송 중...")
     send_email(html, keywords)
     print("\n✅ 완료")
- 
+
