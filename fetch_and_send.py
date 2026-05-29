@@ -17,15 +17,17 @@ IS_THURSDAY = NOW.weekday() == 3
 SOURCES = [
     {
         "section": "📈 경제",
-        "keywords": ["경제", "부동산", "금융", "코스피", "환율", "금리", "Fed", "economy", "markets", "inflation", "trade"],
-        "lang": "kor,eng",
+        "location": "http://en.wikipedia.org/wiki/South_Korea",
+        "lang": "kor",
+        "category": "business",
         "max": 20,
     },
     {
         "section": "🌍 정치 & 외교",
-        "keywords": ["정치", "외교", "선거", "국회", "대통령", "war", "diplomacy", "conflict", "geopolitics", "China", "Russia", "NATO"],
+        "location": None,
         "lang": "kor,eng",
-        "max": 15,
+        "category": "politics",
+        "max": 20,
     },
 ]
  
@@ -34,7 +36,9 @@ THURSDAY_SOURCES = [
     {
         "section": "🏘️ 이번 주 부동산 지표",
         "keywords": ["아파트 매매가격지수", "전세가율", "미분양", "서울 아파트 거래량"],
+        "location": "http://en.wikipedia.org/wiki/South_Korea",
         "lang": "kor",
+        "category": "business",
         "max": 5,
         "summary_prompt": "부동산 시장 지표 분석",
     },
@@ -43,7 +47,7 @@ THURSDAY_SOURCES = [
 NEWSAPI_URL = "https://eventregistry.org/api/v1/article/getArticles"
  
  
-def fetch_section(keywords: list, lang: str, max_articles: int) -> list:
+def fetch_section(location: str, lang: str, category: str, max_articles: int) -> list:
     api_key = os.environ["NEWSAPI_KEY"]
     articles = []
     seen = set()
@@ -51,24 +55,26 @@ def fetch_section(keywords: list, lang: str, max_articles: int) -> list:
  
     payload = {
         "action": "getArticles",
-        "keyword": keywords,
-        "keywordOper": "OR",
         "lang": lang_list,
         "dateStart": (NOW - timedelta(hours=36)).strftime("%Y-%m-%d"),
         "dateEnd": NOW.strftime("%Y-%m-%d"),
-        "sortBy": "date",
-        "sortByAsc": False,
-        "articlesCount": max_articles * 2,
         "articlesSortBy": "date",
+        "articlesSortByAsc": False,
+        "articlesCount": max_articles * 2,
         "resultType": "articles",
         "apiKey": api_key,
     }
  
+    if location:
+        payload["sourceLocationUri"] = location
+    if category == "business":
+        payload["categoryUri"] = "dmoz/Business"
+    elif category == "politics":
+        payload["categoryUri"] = "dmoz/Society/Politics"
+ 
     try:
-        res = requests.post(NEWSAPI_URL, json=payload, timeout=10)
+        res = requests.post(NEWSAPI_URL, json=payload, timeout=30)
         data = res.json()
-        print(f"  API 상태코드: {res.status_code}")
-        print(f"  API 응답 키: {list(data.keys())}")
         total = data.get("articles", {}).get("totalResults", 0)
         print(f"  API 응답: 총 {total}건")
         for art in data.get("articles", {}).get("results", []):
@@ -83,8 +89,6 @@ def fetch_section(keywords: list, lang: str, max_articles: int) -> list:
                 break
     except Exception as e:
         print(f"  NewsAPI 오류: {e}")
-        import traceback
-        traceback.print_exc()
     return articles
  
  
@@ -355,7 +359,7 @@ if __name__ == "__main__":
  
     for src in active_sources:
         print(f"\n[{src['section']}] 수집 중...")
-        articles = fetch_section(src.get("keywords", src.get("queries", [])), src.get("lang", "kor"), src["max"])
+        articles = fetch_section(src.get("location"), src.get("lang", "kor"), src.get("category", ""), src["max"])
         articles = deduplicate(articles, seen_titles)  # 중복 제거
         print(f"  {len(articles)}건 수집 (중복 제거 후)")
         if articles:
@@ -377,4 +381,3 @@ if __name__ == "__main__":
     print("\n이메일 발송 중...")
     send_email(html, keywords)
     print("\n✅ 완료")
-
