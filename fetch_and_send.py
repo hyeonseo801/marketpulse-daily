@@ -65,8 +65,10 @@ feedparser.USER_AGENT = (
 
 
 def fetch_section(queries: list, max_articles: int) -> list:
+    import time
     seen = set()
     articles = []
+    cutoff = time.time() - 36 * 3600  # 36시간 이내만
     for q in queries:
         url = BASE_URL + q.replace(" ", "+")
         try:
@@ -76,6 +78,11 @@ def fetch_section(queries: list, max_articles: int) -> list:
                 link = getattr(entry, "link", "").strip()
                 if not title or not link or title in seen:
                     continue
+                # 날짜 필터 — published 없으면 통과
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    pub_ts = time.mktime(entry.published_parsed)
+                    if pub_ts < cutoff:
+                        continue
                 seen.add(title)
                 source = ""
                 if hasattr(entry, "source") and hasattr(entry.source, "title"):
