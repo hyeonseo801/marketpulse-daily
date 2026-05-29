@@ -1,5 +1,5 @@
-import feedparser
 import anthropic
+import requests
 import smtplib
 import os
 import json
@@ -13,32 +13,19 @@ TODAY = NOW.strftime("%Y년 %m월 %d일")
 WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"][NOW.weekday()]
 IS_THURSDAY = NOW.weekday() == 3
 
-# ── 소스 정의 ─────────────────────────────────────────
+# ── 소스 정의 (NewsAPI.ai 카테고리 기반) ────────────────
 SOURCES = [
     {
-        "section": "부동산 & 금융",
-        "queries": ["부동산 금융정책", "기준금리 금융시장", "부동산 규제"],
-        "max": 4,
+        "section": "📈 경제",
+        "keywords": ["경제", "부동산", "금융", "코스피", "환율", "금리", "Fed", "economy", "markets", "inflation", "trade"],
+        "lang": "kor,eng",
+        "max": 20,
     },
     {
-        "section": "국내 경제",
-        "queries": ["한국 경제 GDP", "코스피 환율 수출입"],
-        "max": 5,
-    },
-    {
-        "section": "국제 경제",
-        "queries": ["Fed interest rate global economy 2026", "oil price trade war inflation 2026"],
-        "max": 5,
-    },
-    {
-        "section": "국내 정치 & 외교",
-        "queries": ["한국 외교 정치", "한미관계 한일관계 외교"],
-        "max": 3,
-    },
-    {
-        "section": "국제 지정학 & 외교",
-        "queries": ["미중 갈등 지정학", "러시아 우크라이나 전쟁", "중동 전쟁 외교", "NATO 트럼프 외교"],
-        "max": 7,
+        "section": "🌍 정치 & 외교",
+        "keywords": ["정치", "외교", "선거", "국회", "대통령", "war", "diplomacy", "conflict", "geopolitics", "China", "Russia", "NATO"],
+        "lang": "kor,eng",
+        "max": 15,
     },
 ]
 
@@ -46,53 +33,52 @@ SOURCES = [
 THURSDAY_SOURCES = [
     {
         "section": "🏘️ 이번 주 부동산 지표",
-        "queries": [
-            "아파트 매매가격지수 이번주 한국부동산원",
-            "전세가율 전세수급 아파트",
-            "미분양 아파트 현황",
-            "서울 아파트 거래량",
-        ],
+        "keywords": ["아파트 매매가격지수", "전세가율", "미분양", "서울 아파트 거래량"],
+        "lang": "kor",
         "max": 5,
         "summary_prompt": "부동산 시장 지표 분석",
     },
 ]
 
-BASE_URL = "https://news.google.com/rss/search?hl=ko&gl=KR&ceid=KR:ko&tbs=qdr:d&q="
-feedparser.USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
+NEWSAPI_URL = "https://eventregistry.org/api/v1/article/getArticles"
 
 
-def fetch_section(queries: list, max_articles: int) -> list:
-    import time
-    seen = set()
+def fetch_section(keywords: list, lang: str, max_articles: int) -> list:
+    api_key = os.environ["NEWSAPI_KEY"]
     articles = []
-    cutoff = time.time() - 36 * 3600  # 36시간 이내만
-    for q in queries:
-        url = BASE_URL + q.replace(" ", "+")
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries:
-                title = getattr(entry, "title", "").strip()
-                link = getattr(entry, "link", "").strip()
-                if not title or not link or title in seen:
-                    continue
-                # 날짜 필터 — published 없으면 통과
-                if hasattr(entry, "published_parsed") and entry.published_parsed:
-                    pub_ts = time.mktime(entry.published_parsed)
-                    if pub_ts < cutoff:
-                        continue
-                seen.add(title)
-                source = ""
-                if hasattr(entry, "source") and hasattr(entry.source, "title"):
-                    source = entry.source.title
-                articles.append({"title": title, "link": link, "source": source})
-                if len(articles) >= max_articles:
-                    return articles
-        except Exception as e:
-            print(f"  RSS 오류: {q} — {e}")
-    return articles[:max_articles]
+    seen = set()
+
+    payload = {
+        "action": "getArticles",
+        "keyword": keywords,
+        "keywordOper": "OR",
+        "lang": lang,
+        "dateStart": (NOW - timedelta(hours=36)).strftime("%Y-%m-%d"),
+        "dateEnd": NOW.strftime("%Y-%m-%d"),
+        "sortBy": "date",
+        "sortByAsc": False,
+        "articlesCount": max_articles * 2,
+        "articlesSortBy": "date",
+        "resultType": "articles",
+        "apiKey": api_key,
+    }
+
+    try:
+        res = requests.post(NEWSAPI_URL, json=payload, timeout=10)
+        data = res.json()
+        for art in data.get("articles", {}).get("results", []):
+            title = art.get("title", "").strip()
+            link = art.get("url", "").strip()
+            source = art.get("source", {}).get("title", "")
+            if not title or not link or title in seen:
+                continue
+            seen.add(title)
+            articles.append({"title": title, "link": link, "source": source})
+            if len(articles) >= max_articles:
+                break
+    except Exception as e:
+        print(f"  NewsAPI 오류: {e}")
+    return articles
 
 
 def deduplicate(articles: list, seen_titles: set) -> list:
@@ -247,13 +233,10 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
     sections_html = ""
     for sec in sections_data:
         is_indicator = "지표" in sec["section"]
-        is_marketpulse = sec["section"] in ["부동산 & 금융", "국내 경제", "국제 경제", "🏘️ 이번 주 부동산 지표"]
+        is_marketpulse = sec["section"] in ["📈 경제", "🏘️ 이번 주 부동산 지표"]
         icon_map = {
-            "부동산 & 금융": "🏦",
-            "국내 경제": "🇰🇷",
-            "국제 경제": "🌐",
-            "국내 정치 & 외교": "🏛️",
-            "국제 지정학 & 외교": "🌍",
+            "📈 경제": "📈",
+            "🌍 정치 & 외교": "🌍",
             "🏘️ 이번 주 부동산 지표": "🏘️",
         }
         icon = icon_map.get(sec["section"], "📰")
@@ -263,7 +246,7 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
 
         # 지정학 섹션 앞에 구분선 추가
         divider = ""
-        if sec["section"] == "국내 정치 & 외교":
+        if sec["section"] == "🌍 정치 & 외교":
             divider = '<div style="border-top:1px solid #2e2e2e;margin:24px 0 28px;"></div>'
 
         sections_html += f"""
@@ -365,7 +348,7 @@ if __name__ == "__main__":
 
     for src in active_sources:
         print(f"\n[{src['section']}] 수집 중...")
-        articles = fetch_section(src["queries"], src["max"])
+        articles = fetch_section(src.get("keywords", src.get("queries", [])), src.get("lang", "kor"), src["max"])
         articles = deduplicate(articles, seen_titles)  # 중복 제거
         print(f"  {len(articles)}건 수집 (중복 제거 후)")
         if articles:
