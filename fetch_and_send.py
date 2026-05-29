@@ -1,5 +1,5 @@
 import anthropic
-import requests
+import feedparser
 import smtplib
 import os
 import json
@@ -13,136 +13,106 @@ TODAY = NOW.strftime("%Y년 %m월 %d일")
 WEEKDAY = ["월", "화", "수", "목", "금", "토", "일"][NOW.weekday()]
 IS_THURSDAY = NOW.weekday() == 3
 
-# ── 소스 정의 (NewsAPI.ai 카테고리 기반) ────────────────
-# 국내 주요 언론사
-KR_SOURCES = [
-    "yna.co.kr", "chosun.com", "joongang.co.kr", "hani.co.kr",
-    "khan.co.kr", "mk.co.kr", "hankyung.com", "donga.com",
-    "hankookilbo.com", "ytn.co.kr", "kbs.co.kr", "mbc.co.kr"
-]
-
-# 국제 정치/외교 주요 언론사
-INTL_SOURCES = [
-    "reuters.com", "apnews.com", "bbc.com", "theguardian.com",
-    "ft.com", "economist.com", "foreignpolicy.com", "politico.com",
-    "aljazeera.com", "nytimes.com", "washingtonpost.com"
-]
-
 SOURCES = [
     {
         "section": "📈 국내 경제",
-        "sources": KR_SOURCES,
-        "lang": "kor",
+        "queries": [
+            "기준금리 OR 금리동결 OR 금리인하 OR 한국은행 OR 소비자물가 OR GDP OR 경제성장률",
+            "코스피 OR 코스닥 OR 삼성전자 OR SK하이닉스 OR 외국인순매수 OR 시가총액 OR 어닝서프라이즈",
+            "원달러환율 OR 환율 OR 무역수지 OR 경상수지 OR 수출입 OR 무역흑자 OR 무역적자",
+            "주담대 OR 대출규제 OR 가계부채 OR 반도체수출 OR AI반도체 OR 고용률 OR 실업률",
+        ],
+        "lang": "ko",
         "max": 10,
     },
     {
         "section": "🌐 국제 경제",
-        "sources": INTL_SOURCES,
-        "lang": "eng",
+        "queries": [
+            "Fed OR FOMC OR Powell OR 연준금리 OR 기준금리인상 OR 양적긴축 OR IMF OR 스태그플레이션",
+            "관세전쟁 OR 무역보복 OR 수출통제 OR 디커플링 OR 공급망재편 OR 보호무역 OR WTO",
+            "WTI OR 브렌트유 OR OPEC OR 국제유가 OR 에너지안보 OR 천연가스 OR 희토류",
+            "나스닥 OR S&P500 OR 다우지수 OR 빅테크 OR 엔저 OR 달러강세 OR 중국경제",
+        ],
+        "lang": "ko",
         "max": 10,
     },
     {
         "section": "🏛️ 국내 정치 & 외교",
-        "sources": KR_SOURCES,
-        "lang": "kor",
+        "queries": [
+            "국회 OR 본회의 OR 법안 OR 필리버스터 OR 국정감사 OR 청문회 OR 특검",
+            "이재명 OR 한동훈 OR 오세훈 OR 조국 OR 국민의힘 OR 더불어민주당 OR 친명 OR 친윤",
+            "대통령 OR 대통령실 OR 용산 OR 거부권 OR 탄핵 OR 개헌 OR 개각 OR 국무총리",
+            "지방선거 OR 사전투표 OR 격전지 OR 판세 OR 공천 OR 여론조사 OR 경합지",
+            "한미관계 OR 한일관계 OR 한중관계 OR 외교 OR 정상회담 OR 압수수색 OR 여야",
+        ],
+        "lang": "ko",
         "max": 10,
     },
     {
         "section": "🌍 국제 지정학 & 외교",
-        "sources": INTL_SOURCES,
-        "lang": "eng",
+        "queries": [
+            "미중갈등 OR 대만해협 OR 남중국해 OR G7 OR BRICS OR 지정학리스크 OR 국제형사재판소",
+            "러우전쟁 OR 우크라이나 OR 종전협상 OR 이스라엘 OR 가자 OR 중동전쟁 OR 이란",
+            "트럼프 OR 바이든 OR NATO OR 방위비분담 OR 핵무기 OR 군사도발 OR 파병",
+            "기술패권 OR AI패권 OR 반도체동맹 OR 사이버안보 OR 북한 OR 핵실험 OR 미사일",
+        ],
+        "lang": "ko",
         "max": 10,
     },
 ]
 
-# 목요일 전용 부동산 지표 섹션
 THURSDAY_SOURCES = [
     {
         "section": "🏘️ 이번 주 부동산 지표",
-        "keywords": ["아파트 매매가격지수", "전세가율", "미분양", "서울 아파트 거래량"],
-        "location": "http://en.wikipedia.org/wiki/South_Korea",
-        "lang": "kor",
-        "category": "business",
+        "queries": [
+            "아파트매매가격지수 OR 한국부동산원 OR 전세가율",
+            "미분양 OR 서울아파트거래량 OR 전세수급",
+        ],
+        "lang": "ko",
         "max": 5,
-        "summary_prompt": "부동산 시장 지표 분석",
     },
 ]
 
-NEWSAPI_URL = "https://eventregistry.org/api/v1/article/getArticles"
+BASE_URL = "https://news.google.com/rss/search?tbs=qdr:d&q="
 
+feedparser.USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
-def fetch_section(lang: str, max_articles: int, location: str = None, sources: list = None, keyword: list = None) -> list:
-    api_key = os.environ["NEWSAPI_KEY"]
-    articles = []
+def get_lang_params(lang):
+    if lang == "ko":
+        return "&hl=ko&gl=KR&ceid=KR:ko"
+    return "&hl=en-US&gl=US&ceid=US:en"
+
+def fetch_section(queries: list, lang: str, max_articles: int) -> list:
     seen = set()
-    lang_list = lang.split(",") if "," in lang else [lang]
-
-    payload = {
-        "action": "getArticles",
-        "lang": lang_list,
-        "dateStart": (NOW - timedelta(hours=24)).strftime("%Y-%m-%d"),
-        "dateEnd": NOW.strftime("%Y-%m-%d"),
-        "articlesSortBy": "socialScore",
-        "articlesSortByAsc": False,
-        "articlesCount": max_articles * 3,
-        "resultType": "articles",
-        "apiKey": api_key,
-    }
-
-    if sources:
-        payload["sourceUri"] = sources
-    elif location:
-        payload["sourceLocationUri"] = location
-    if keyword:
-        payload["keyword"] = keyword
-        payload["keywordOper"] = "OR"
-
-    try:
-        res = requests.post(NEWSAPI_URL, json=payload, timeout=30)
-        data = res.json()
-        total = data.get("articles", {}).get("totalResults", 0)
-        print(f"  API 응답: 총 {total}건 | 상태코드: {res.status_code}")
-        for art in data.get("articles", {}).get("results", []):
-            title = art.get("title", "").strip()
-            link = art.get("url", "").strip()
-            source = art.get("source", {}).get("title", "")
-            if not title or not link or title in seen:
-                continue
-            seen.add(title)
-            articles.append({"title": title, "link": link, "source": source})
-            if len(articles) >= max_articles:
-                break
-    except Exception as e:
-        print(f"  NewsAPI 오류: {e}")
-    return articles
-
-
-def deduplicate(articles: list, seen_titles: set) -> list:
-    result = []
-    for a in articles:
-        title = a["title"]
-        words = set(title.replace(" ", "")[:40])
-        is_dup = False
-        for seen in seen_titles:
-            seen_words = set(seen.replace(" ", "")[:40])
-            overlap = len(words & seen_words) / max(len(words), 1)
-            if overlap > 0.8:
-                is_dup = True
-                break
-        if not is_dup:
-            seen_titles.add(title)
-            result.append(a)
-    return result
+    articles = []
+    for q in queries:
+        url = BASE_URL + q.replace(" ", "+") + get_lang_params(lang)
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                title = getattr(entry, "title", "").strip()
+                link = getattr(entry, "link", "").strip()
+                if not title or not link or title in seen:
+                    continue
+                seen.add(title)
+                source = ""
+                if hasattr(entry, "source") and hasattr(entry.source, "title"):
+                    source = entry.source.title
+                articles.append({"title": title, "link": link, "source": source})
+                if len(articles) >= max_articles:
+                    return articles
+        except Exception as e:
+            print(f"  RSS 오류: {q[:30]} — {e}")
+    return articles[:max_articles]
 
 
 def summarize_batch(articles: list, is_indicator: bool = False) -> list:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     items_text = "\n".join(f"{i+1}. {a['title']}" for i, a in enumerate(articles))
-
-    if is_indicator:
-        extra = "수치와 전주 대비 변동을 반드시 포함해. 없으면 기사에서 유추 가능한 방향성(상승/하락/보합)을 명시해."
-    else:
-        extra = ""
+    extra = "수치와 전주 대비 변동을 반드시 포함해." if is_indicator else ""
 
     prompt = f"""다음 뉴스 제목들을 각각 요약해줘. {extra}
 반드시 아래 형식을 정확히 지켜. 번호 순서대로, 다른 말 없이 JSON 배열만 출력해.
@@ -181,7 +151,7 @@ def summarize_batch(articles: list, is_indicator: bool = False) -> list:
 
 def extract_keywords(all_articles: list) -> str:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    titles = " / ".join(a["title"] for a in all_articles[:15])
+    titles = " / ".join(a["title"] for a in all_articles[:20])
     try:
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -211,13 +181,10 @@ def generate_briefing(all_articles: list) -> str:
         return "오늘의 주요 경제·외교 동향을 확인하세요."
 
 
-# ── HTML 생성 ─────────────────────────────────────────
 def card(article: dict, is_indicator: bool = False) -> str:
     s = article.get("summary", {})
     what, why, num = s.get("what", "-"), s.get("why", "-"), s.get("num", "-")
-    source = f'<span style="color:#888;font-size:11px">{article["source"]}</span>' if article["source"] else ""
-    num_color = "#155724" if not is_indicator else "#0c3547"
-    num_bg = "#D4EDDA" if not is_indicator else "#cce8f4"
+    source = f'<span style="color:#666;font-size:11px">{article["source"]}</span>' if article["source"] else ""
 
     return f"""
     <div style="background:#1e1e1e;border:1px solid #2e2e2e;border-radius:8px;
@@ -256,12 +223,9 @@ def card(article: dict, is_indicator: bool = False) -> str:
 def build_thursday_banner() -> str:
     return """
     <div style="background:linear-gradient(135deg,#1a3a2a,#0f2a1a);border-radius:10px;
-                padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px;">
-      <div style="font-size:24px;">🏘️</div>
-      <div>
-        <div style="color:#4ade80;font-size:11px;font-weight:700;letter-spacing:1px;">THURSDAY SPECIAL</div>
-        <div style="color:#fff;font-size:14px;font-weight:600;margin-top:2px;">이번 주 부동산 지표 포함</div>
-      </div>
+                padding:16px 20px;margin-bottom:20px;">
+      <div style="color:#4ade80;font-size:11px;font-weight:700;letter-spacing:1px;">THURSDAY SPECIAL</div>
+      <div style="color:#fff;font-size:14px;font-weight:600;margin-top:2px;">이번 주 부동산 지표 포함</div>
     </div>"""
 
 
@@ -282,7 +246,6 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
         border_color = "#4ade80" if is_indicator else ("#f0b429" if is_marketpulse else "#7c6fe0")
         cards_html = "".join(card(a, is_indicator) for a in sec["articles"])
 
-        # 지정학 섹션 앞에 구분선 추가
         divider = ""
         if sec["section"] == "🏛️ 국내 정치 & 외교":
             divider = '<div style="border-top:1px solid #2e2e2e;margin:24px 0 28px;"></div>'
@@ -309,7 +272,6 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
 <body style="margin:0;padding:0;background:#0d0d0d;font-family:'IBM Plex Sans KR','Apple SD Gothic Neo',sans-serif;">
   <div style="max-width:600px;margin:0 auto;padding:20px 16px;">
 
-    <!-- 메인 헤더 -->
     <div style="background:#141414;border:1px solid #2a2a2a;border-radius:12px;padding:28px 24px;margin-bottom:16px;text-align:center;">
       <div style="font-size:30px;font-weight:700;color:#f0b429;letter-spacing:-1px;font-family:'IBM Plex Serif',serif;">잡학다식</div>
       <div style="color:#555;font-size:11px;margin-top:4px;letter-spacing:2px;">DAILY INTELLIGENCE BRIEFING</div>
@@ -324,21 +286,15 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
 
     {thursday_banner}
 
-    <!-- 한줄 브리핑 -->
     <div style="background:#141414;border:1px solid #2a2a2a;border-radius:8px;
                 padding:14px 18px;margin-bottom:12px;text-align:center;">
-      <div style="font-size:10px;color:#888;font-weight:700;letter-spacing:2px;margin-bottom:6px;">
-        TODAY'S BRIEFING
-      </div>
+      <div style="font-size:10px;color:#888;font-weight:700;letter-spacing:2px;margin-bottom:6px;">TODAY'S BRIEFING</div>
       <div style="font-size:14px;color:#e0e0e0;line-height:1.6;">{briefing}</div>
     </div>
 
-    <!-- 키워드 -->
     <div style="background:#1a1500;border:1px solid #3a2e00;border-radius:8px;
                 padding:14px 18px;margin-bottom:24px;text-align:center;">
-      <div style="font-size:10px;color:#f0b429;font-weight:700;letter-spacing:2px;margin-bottom:6px;">
-        TODAY'S KEYWORDS
-      </div>
+      <div style="font-size:10px;color:#f0b429;font-weight:700;letter-spacing:2px;margin-bottom:6px;">TODAY'S KEYWORDS</div>
       <div style="font-size:16px;font-weight:700;color:#f0f0f0;">{keywords}</div>
     </div>
 
@@ -373,7 +329,6 @@ def send_email(html: str, keywords: str):
     print(f"✅ 이메일 발송 완료 → {', '.join(receivers)}")
 
 
-# ── 메인 ─────────────────────────────────────────────
 if __name__ == "__main__":
     print(f"=== MarketPulse {TODAY} ({WEEKDAY}요일) ===")
     if IS_THURSDAY:
@@ -382,9 +337,10 @@ if __name__ == "__main__":
     active_sources = SOURCES + (THURSDAY_SOURCES if IS_THURSDAY else [])
     sections_data = []
     all_articles = []
+
     for src in active_sources:
         print(f"\n[{src['section']}] 수집 중...")
-        articles = fetch_section(src.get("lang", "kor"), src["max"], src.get("location"), src.get("sources"), src.get("keyword"))
+        articles = fetch_section(src["queries"], src.get("lang", "ko"), src["max"])
         print(f"  {len(articles)}건 수집")
         if articles:
             is_ind = "지표" in src["section"]
