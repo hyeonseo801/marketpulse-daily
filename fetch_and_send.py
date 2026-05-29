@@ -16,18 +16,30 @@ IS_THURSDAY = NOW.weekday() == 3
 # ── 소스 정의 (NewsAPI.ai 카테고리 기반) ────────────────
 SOURCES = [
     {
-        "section": "📈 경제",
+        "section": "📈 국내 경제",
         "location": "http://en.wikipedia.org/wiki/South_Korea",
         "lang": "kor",
-        "category": "business",
-        "max": 20,
+        "max": 10,
     },
     {
-        "section": "🌍 정치 & 외교",
+        "section": "🌐 국제 경제",
         "location": None,
-        "lang": "kor,eng",
-        "category": "politics",
-        "max": 20,
+        "lang": "eng",
+        "keyword": ["economy", "finance", "market", "trade", "inflation", "GDP"],
+        "max": 10,
+    },
+    {
+        "section": "🏛️ 국내 정치 & 외교",
+        "location": "http://en.wikipedia.org/wiki/South_Korea",
+        "lang": "kor",
+        "max": 10,
+    },
+    {
+        "section": "🌍 국제 지정학 & 외교",
+        "location": None,
+        "lang": "eng",
+        "keyword": ["war", "diplomacy", "conflict", "election", "sanctions", "geopolitics"],
+        "max": 10,
     },
 ]
 
@@ -47,7 +59,7 @@ THURSDAY_SOURCES = [
 NEWSAPI_URL = "https://eventregistry.org/api/v1/article/getArticles"
 
 
-def fetch_section(location: str, lang: str, category: str, max_articles: int) -> list:
+def fetch_section(location: str, lang: str, max_articles: int, keyword: list = None) -> list:
     api_key = os.environ["NEWSAPI_KEY"]
     articles = []
     seen = set()
@@ -56,9 +68,9 @@ def fetch_section(location: str, lang: str, category: str, max_articles: int) ->
     payload = {
         "action": "getArticles",
         "lang": lang_list,
-        "dateStart": (NOW - timedelta(hours=36)).strftime("%Y-%m-%d"),
+        "dateStart": (NOW - timedelta(hours=24)).strftime("%Y-%m-%d"),
         "dateEnd": NOW.strftime("%Y-%m-%d"),
-        "articlesSortBy": "date",
+        "articlesSortBy": "socialScore",
         "articlesSortByAsc": False,
         "articlesCount": max_articles * 3,
         "resultType": "articles",
@@ -67,7 +79,9 @@ def fetch_section(location: str, lang: str, category: str, max_articles: int) ->
 
     if location:
         payload["sourceLocationUri"] = location
-    # category는 lang과 location으로만 필터링
+    if keyword:
+        payload["keyword"] = keyword
+        payload["keywordOper"] = "OR"
 
     try:
         res = requests.post(NEWSAPI_URL, json=payload, timeout=30)
@@ -241,10 +255,12 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
     sections_html = ""
     for sec in sections_data:
         is_indicator = "지표" in sec["section"]
-        is_marketpulse = sec["section"] in ["📈 경제", "🏘️ 이번 주 부동산 지표"]
+        is_marketpulse = sec["section"] in ["📈 국내 경제", "🌐 국제 경제", "🏘️ 이번 주 부동산 지표"]
         icon_map = {
-            "📈 경제": "📈",
-            "🌍 정치 & 외교": "🌍",
+            "📈 국내 경제": "📈",
+            "🌐 국제 경제": "🌐",
+            "🏛️ 국내 정치 & 외교": "🏛️",
+            "🌍 국제 지정학 & 외교": "🌍",
             "🏘️ 이번 주 부동산 지표": "🏘️",
         }
         icon = icon_map.get(sec["section"], "📰")
@@ -254,7 +270,7 @@ def build_html(sections_data: list, keywords: str, briefing: str = "") -> str:
 
         # 지정학 섹션 앞에 구분선 추가
         divider = ""
-        if sec["section"] == "🌍 정치 & 외교":
+        if sec["section"] == "🏛️ 국내 정치 & 외교":
             divider = '<div style="border-top:1px solid #2e2e2e;margin:24px 0 28px;"></div>'
 
         sections_html += f"""
@@ -356,7 +372,7 @@ if __name__ == "__main__":
 
     for src in active_sources:
         print(f"\n[{src['section']}] 수집 중...")
-        articles = fetch_section(src.get("location"), src.get("lang", "kor"), src.get("category", ""), src["max"])
+        articles = fetch_section(src.get("location"), src.get("lang", "kor"), src["max"], src.get("keyword"))
         articles = deduplicate(articles, seen_titles)  # 중복 제거
         print(f"  {len(articles)}건 수집 (중복 제거 후)")
         if articles:
