@@ -17,10 +17,10 @@ SOURCES = [
     {
         "section": "📈 국내 경제",
         "queries": [
-            "기준금리 OR 금리동결 OR 금리인하 OR 한국은행 OR 소비자물가 OR GDP OR 경제성장률",
-            "코스피 OR 코스닥 OR 삼성전자 OR SK하이닉스 OR 외국인순매수 OR 시가총액 OR 어닝서프라이즈",
-            "원달러환율 OR 환율 OR 무역수지 OR 경상수지 OR 수출입 OR 무역흑자 OR 무역적자",
-            "주담대 OR 대출규제 OR 가계부채 OR 반도체수출 OR AI반도체 OR 고용률 OR 실업률",
+            "기준금리 OR 금리 OR 한국은행 OR 물가 OR 소비자물가 OR GDP",
+            "코스피 OR 코스닥 OR 증시 OR 삼성전자 OR SK하이닉스 OR 반도체 OR 외국인 OR 실적",
+            "환율 OR 원달러 OR 무역수지 OR 수출 OR 경상수지 OR 관세",
+            "부동산 OR 집값 OR 주택 OR 대출 OR 가계부채 OR 고용 OR 실업",
         ],
         "lang": "ko",
         "max": 10,
@@ -28,22 +28,21 @@ SOURCES = [
     {
         "section": "🌐 국제 경제",
         "queries": [
-            "Fed OR FOMC OR Powell OR 연준금리 OR 기준금리인상 OR 양적긴축 OR IMF OR 스태그플레이션",
-            "관세전쟁 OR 무역보복 OR 수출통제 OR 디커플링 OR 공급망재편 OR 보호무역 OR WTO",
-            "WTI OR 브렌트유 OR OPEC OR 국제유가 OR 에너지안보 OR 천연가스 OR 희토류",
-            "나스닥 OR S&P500 OR 다우지수 OR 빅테크 OR 엔저 OR 달러강세 OR 중국경제",
+            "Fed OR FOMC OR interest rate OR inflation OR rate cut OR Powell",
+            "tariff OR trade war OR trade deal OR export OR supply chain",
+            "stock market OR Nasdaq OR S&P 500 OR big tech OR Nvidia OR dollar",
+            "oil price OR crude OR OPEC OR energy OR natural gas",
         ],
-        "lang": "ko",
+        "lang": "en",
         "max": 10,
     },
     {
         "section": "🏛️ 국내 정치 & 외교",
         "queries": [
-            "국회 OR 본회의 OR 법안 OR 필리버스터 OR 국정감사 OR 청문회 OR 특검",
-            "이재명 OR 한동훈 OR 오세훈 OR 조국 OR 국민의힘 OR 더불어민주당 OR 친명 OR 친윤",
-            "대통령 OR 대통령실 OR 용산 OR 거부권 OR 탄핵 OR 개헌 OR 개각 OR 국무총리",
-            "지방선거 OR 사전투표 OR 격전지 OR 판세 OR 공천 OR 여론조사 OR 경합지",
-            "한미관계 OR 한일관계 OR 한중관계 OR 외교 OR 정상회담 OR 압수수색 OR 여야",
+            "지방선거 OR 사전투표 OR 출구조사 OR 판세 OR 경합지 OR 개표",
+            "이재명 OR 조국 OR 한동훈 OR 오세훈 OR 대통령실",
+            "더불어민주당 OR 국민의힘 OR 여야 OR 국회 OR 특검 OR 개각",
+            "외교 OR 정상회담 OR 한미 OR 한일 OR 방위비",
         ],
         "lang": "ko",
         "max": 10,
@@ -51,10 +50,10 @@ SOURCES = [
     {
         "section": "🌍 국제 지정학 & 외교",
         "queries": [
-            "미중갈등 OR 대만해협 OR 남중국해 OR G7 OR BRICS OR 지정학리스크 OR 국제형사재판소",
-            "러우전쟁 OR 우크라이나 OR 종전협상 OR 이스라엘 OR 가자 OR 중동전쟁 OR 이란",
-            "트럼프 OR 바이든 OR NATO OR 방위비분담 OR 핵무기 OR 군사도발 OR 파병",
-            "기술패권 OR AI패권 OR 반도체동맹 OR 사이버안보 OR 북한 OR 핵실험 OR 미사일",
+            "미중 OR 중국 OR 트럼프 OR 시진핑 OR 대만 OR 남중국해",
+            "우크라이나 OR 러시아 OR 이스라엘 OR 중동 OR 이란 OR 가자",
+            "미국 OR NATO OR 동맹 OR 방위비 OR 핵무기 OR 국방",
+            "북한 OR 김정은 OR 미사일 OR 핵 OR 도발",
         ],
         "lang": "ko",
         "max": 10,
@@ -65,8 +64,8 @@ THURSDAY_SOURCES = [
     {
         "section": "🏘️ 이번 주 부동산 지표",
         "queries": [
-            "아파트매매가격지수 OR 한국부동산원 OR 전세가율",
-            "미분양 OR 서울아파트거래량 OR 전세수급",
+            "아파트 OR 매매가격 OR 전세가율 OR 한국부동산원 OR 주간통계",
+            "미분양 OR 거래량 OR 전세수급 OR 분양가 OR 청약",
         ],
         "lang": "ko",
         "max": 5,
@@ -74,7 +73,6 @@ THURSDAY_SOURCES = [
 ]
 
 BASE_URL = "https://news.google.com/rss/search?tbs=qdr:d&q="
-
 feedparser.USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -85,8 +83,14 @@ def get_lang_params(lang):
         return "&hl=ko&gl=KR&ceid=KR:ko"
     return "&hl=en-US&gl=US&ceid=US:en"
 
+def is_similar(title1: str, title2: str) -> bool:
+    t1 = set(title1.replace(" ", "")[:20])
+    t2 = set(title2.replace(" ", "")[:20])
+    overlap = len(t1 & t2) / max(len(t1), 1)
+    return overlap > 0.7
+
 def fetch_section(queries: list, lang: str, max_articles: int) -> list:
-    seen = set()
+    seen_titles = []
     articles = []
     for q in queries:
         url = BASE_URL + q.replace(" ", "+") + get_lang_params(lang)
@@ -95,9 +99,11 @@ def fetch_section(queries: list, lang: str, max_articles: int) -> list:
             for entry in feed.entries:
                 title = getattr(entry, "title", "").strip()
                 link = getattr(entry, "link", "").strip()
-                if not title or not link or title in seen:
+                if not title or not link:
                     continue
-                seen.add(title)
+                if any(is_similar(title, t) for t in seen_titles):
+                    continue
+                seen_titles.append(title)
                 source = ""
                 if hasattr(entry, "source") and hasattr(entry.source, "title"):
                     source = entry.source.title
